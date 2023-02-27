@@ -82,6 +82,7 @@ def mill_rectangle(rect: Tuple[float, float, float, float],
     now = time.time()
     f = model.ProgressiveFuture(start=now, end=now + iteration * duration + 1)
     miller = OrsayMilling(f, rect, scanner, iteration, duration, probe_size, overlap)
+    # miller = FakeOrsayMilling(f, rect, scanner, iteration, duration, probe_size, overlap)
     f.task_canceller = miller.cancel_milling
 
     # Connect the future to the task and run it in a thread.
@@ -89,7 +90,6 @@ def mill_rectangle(rect: Tuple[float, float, float, float],
     _executor.submitf(f, miller.do_milling)
 
     return f
-
 
 class OrsayMilling:
     def __init__(self, f: futures.Future,
@@ -255,7 +255,6 @@ class OrsayMilling:
             # scanner.CurrentSubList.Unsubscribe(self.param_logger)
             # scanner.CurrentMillingPoint.Unsubscribe(self.param_logger)
 
-
     def cancel_milling(self, future):
         """
         Cancels the active milling process
@@ -291,3 +290,20 @@ class OrsayMilling:
             logging.debug('New active procedure (%s) : %s', param.Actual, self.miller.ActiveProcedureName.Target)
             self.miller.MillingActivationState.Target = 1  # Start milling once the new procedure has been loaded
             param.Unsubscribe(self.on_procedure_info)
+
+
+class FakeOrsayMilling(OrsayMilling):
+    def do_milling(self):
+        """
+        Fake milling function used during simulation
+        """
+        logging.info("Fake Milling a rectangle")
+        time.sleep(5)
+
+    def cancel_milling(self, future):
+        """
+        Fake milling function used during simulation
+        """
+        logging.info("Cancel Fake Milling a rectangle")
+
+        return True
