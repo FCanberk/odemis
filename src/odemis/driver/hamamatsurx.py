@@ -597,6 +597,11 @@ class StreakUnit(model.HwComponent):
         parent.DevParamSet(self.location, "Trig. level", 1)  # TODO check what value needed regarding HW
         parent.DevParamSet(self.location, "Trig. slope", "Rising")
 
+        # Refresh regularly the values, from the hardware, starting from now
+        self._updateSettings()
+        self._va_poll = util.RepeatingTimer(5, self._updateSettings, "Streak unit settings polling")
+        self._va_poll.start()
+
         # parent.DevParamGet(self.location, "Trig. status")  # read only
 
         # Ready: Is displayed when the system is ready to receive a trigger signal.
@@ -630,6 +635,63 @@ class StreakUnit(model.HwComponent):
         self.timeRangeFactor = None
 
         # read-only VAs TODO: Trig. Mode, Trig. level, Trig. slope?
+
+    def _updateSettings(self) -> None:
+        # TODO: EDIT THE FUNCTION AND UPDATE THE SETTINGS
+        """
+        Read all the current settings from the RemoteEx and reflect them on the VAs
+        """
+        logging.debug("Updating streak unit settings")
+        try:
+            external = self._isExternal()
+            if external != self.external.value:
+                self.external._value = external
+                self.external.notify(external)
+            # Read dwellTime and resolution settings from the SEM and reflects them on the VAs only
+            # when external is False i.e. the scan mode is 'full_frame'.
+            # If external is True i.e. the scan mode is 'external' the dwellTime and resolution are
+            # disabled and hence no need to reflect settings on the VAs.
+            if not self.external.value:
+                dwell_time = self.parent.get_dwell_time()
+                if dwell_time != self.dwellTime.value:
+                    self.dwellTime._value = dwell_time
+                    self.dwellTime.notify(dwell_time)
+                if self._has_detector:
+                    self._updateResolution()
+            voltage = self.parent.get_ht_voltage()
+            v_range = self.accelVoltage.range
+            if not v_range[0] <= voltage <= v_range[1]:
+                logging.info("Voltage {} V is outside of range {}, clipping to nearest value.".format(voltage, v_range))
+                voltage = self.accelVoltage.clip(voltage)
+            if voltage != self.accelVoltage.value:
+                self.accelVoltage._value = voltage
+                self.accelVoltage.notify(voltage)
+            blanked = self.parent.beam_is_blanked()  # blanker status on the HW
+            # if blanker is in auto mode (None), don't care about HW status (self-regulated)
+            if self.blanker.value is not None and blanked != self.blanker.value:
+                self.blanker._value = blanked
+                self.blanker.notify(blanked)
+            spot_size = self.parent.get_ebeam_spotsize()
+            if spot_size != self.spotSize.value:
+                self.spotSize._value = spot_size
+                self.spotSize.notify(spot_size)
+            beam_shift = self.parent.get_beam_shift()
+            if beam_shift != self.shift.value:
+                self.shift._value = beam_shift
+                self.shift.notify(beam_shift)
+            rotation = self.parent.get_rotation()
+            if rotation != self.rotation.value:
+                self.rotation._value = rotation
+                self.rotation.notify(rotation)
+            fov = self.parent.get_scanning_size()[0]
+            if fov != self.horizontalFoV.value:
+                self.horizontalFoV._value = fov
+                mag = self._hfw_nomag / fov
+                self.magnification._value = mag
+                self.horizontalFoV.notify(fov)
+                self.magnification.notify(mag)
+        except Exception:
+            logging.exception("Unexpected failure when polling settings")
 
     def GetStreakMode(self):
         """
